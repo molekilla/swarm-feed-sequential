@@ -1,6 +1,6 @@
-import { BatchId, Bee, Reference, Signer, Topic } from '@ethersphere/bee-js'
-import { SingleOwnerChunk } from '@ethersphere/bee-js/dist/types/chunk/soc'
-import type { EthAddress } from '@ethersphere/bee-js/dist/cjs/types'
+import { BatchId, Bee, Reference, Signer, Topic } from "@ethersphere/bee-js";
+import { SingleOwnerChunk } from "@ethersphere/bee-js/dist/types/chunk/soc";
+import type { EthAddress } from "@ethersphere/bee-js/dist/cjs/types";
 import {
   assembleSocPayload,
   FeedChunk,
@@ -11,17 +11,17 @@ import {
   SwarmFeed,
   SwarmFeedR,
   SwarmFeedRW,
-} from './feed'
-import { ChunkReference, makeSigner, writeUint64BigEndian } from './utils'
-import { Utils } from '@ethersphere/bee-js'
-import { FetchFeedUpdateResponse } from '@ethersphere/bee-js/dist/types/modules/feed'
-const { makeHexEthAddress, hexToBytes } = Utils
+} from "./feed";
+import { ChunkReference, makeSigner, writeUint64BigEndian } from "./utils";
+import { Utils } from "@ethersphere/bee-js";
+import { FetchFeedUpdateResponse } from "@ethersphere/bee-js/dist/types/modules/feed";
+const { makeHexEthAddress, hexToBytes } = Utils;
 
 export class SequentialFeed implements SwarmFeed<number> {
-  public readonly type: FeedType
+  public readonly type: FeedType;
 
   public constructor(public readonly bee: Bee) {
-    this.type = 'sequential'
+    this.type = "sequential";
   }
 
   /**
@@ -32,48 +32,52 @@ export class SequentialFeed implements SwarmFeed<number> {
    */
   public makeFeedR(
     topic: Topic | Uint8Array | string,
-    owner: EthAddress | Uint8Array | string,
+    owner: EthAddress | Uint8Array | string
   ): SwarmFeedR<number> {
-    const socReader = this.bee.makeSOCReader(owner)
-    const topicHex = makeTopic(topic)
-    const topicBytes = hexToBytes<32>(topicHex)
-    const ownerHex = makeHexEthAddress(owner)
-    const feedReader = this.bee.makeFeedReader('sequence', topicHex, owner)
+    const socReader = this.bee.makeSOCReader(owner);
+    const topicHex = makeTopic(topic);
+    const topicBytes = hexToBytes<32>(topicHex);
+    const ownerHex = makeHexEthAddress(owner);
+    const feedReader = this.bee.makeFeedReader("sequence", topicHex, owner);
 
+    /**
+     * Gets the last update in the feed
+     * @returns An update object
+     */
     const getLastUpdate = async (): Promise<FetchFeedUpdateResponse> => {
-      const lastUpdate = await feedReader.download()
+      const lastUpdate = await feedReader.download();
 
-      return lastUpdate
-    }
+      return lastUpdate;
+    };
     /**
      * Gets the last index in the feed
      * @returns An index number
      */
     const getLastIndex = async (): Promise<number> => {
       // It fetches the latest feed on bee-side, because it is faster than lookup for the last index by individual API calls.
-      let index: number
+      let index: number;
       try {
-        const lastUpdate = await feedReader.download()
-        const { feedIndex } = lastUpdate
-        index = fetchIndexToInt(feedIndex)
+        const lastUpdate = await feedReader.download();
+        const { feedIndex } = lastUpdate;
+        index = fetchIndexToInt(feedIndex);
       } catch (e) {
-        index = -1
+        index = -1;
       }
 
-      return index
-    }
+      return index;
+    };
 
     /**
      * Gets the last appended chunk in the feed
      * @returns A feed chunk
      */
     const findLastUpdate = async (): Promise<FeedChunk> => {
-      const index = await getLastIndex()
-      const id = this.getIdentifier(topic as Utils.Bytes<32>, index)
-      const socChunk = await socReader.download(id)
+      const index = await getLastIndex();
+      const id = this.getIdentifier(topic as Utils.Bytes<32>, index);
+      const socChunk = await socReader.download(id);
 
-      return mapSocToFeed(socChunk, index)
-    }
+      return mapSocToFeed(socChunk, index);
+    };
 
     /**
      * Downloads a chunk by index number
@@ -81,10 +85,12 @@ export class SequentialFeed implements SwarmFeed<number> {
      * @returns A feed chunk
      */
     const getUpdate = async (index: number): Promise<FeedChunk> => {
-      const socChunk = await socReader.download(this.getIdentifier(topic as Utils.Bytes<32>, index))
+      const socChunk = await socReader.download(
+        this.getIdentifier(topic as Utils.Bytes<32>, index)
+      );
 
-      return mapSocToFeed(socChunk, index)
-    }
+      return mapSocToFeed(socChunk, index);
+    };
 
     /**
      * Download all chunk by indices
@@ -92,20 +98,24 @@ export class SequentialFeed implements SwarmFeed<number> {
      * @returns An array of chunks
      */
     const getUpdates = async (indices: number[]): Promise<FeedChunk[]> => {
-      const promises: Promise<SingleOwnerChunk>[] = []
+      const promises: Promise<SingleOwnerChunk>[] = [];
       for (const index of indices) {
-        promises.push(socReader.download(this.getIdentifier(topic as Utils.Bytes<32>, index)))
+        promises.push(
+          socReader.download(
+            this.getIdentifier(topic as Utils.Bytes<32>, index)
+          )
+        );
       }
-      const socs = await Promise.all(promises)
+      const socs = await Promise.all(promises);
       const feeds: FeedChunk[] = socs.map((soc, orderIndex) => {
-        return mapSocToFeed(soc, indices[orderIndex])
-      })
+        return mapSocToFeed(soc, indices[orderIndex]);
+      });
 
-      return feeds
-    }
+      return feeds;
+    };
 
     return {
-      type: 'sequential',
+      type: "sequential",
       owner: ownerHex,
       topic: topicHex,
       findLastUpdate,
@@ -113,7 +123,7 @@ export class SequentialFeed implements SwarmFeed<number> {
       getUpdates,
       getLastIndex,
       getLastUpdate,
-    }
+    };
   }
 
   /**
@@ -124,13 +134,13 @@ export class SequentialFeed implements SwarmFeed<number> {
    */
   public makeFeedRW(
     topic: string | Topic | Uint8Array,
-    signer: string | Uint8Array | Signer,
+    signer: string | Uint8Array | Signer
   ): SwarmFeedRW<number> {
-    const canonicalSigner = makeSigner(signer)
-    const topicHex = makeTopic(topic)
-    const topicBytes = hexToBytes<32>(topicHex)
-    const feedR = this.makeFeedR(topic, canonicalSigner.address)
-    const socWriter = this.bee.makeSOCWriter(canonicalSigner)
+    const canonicalSigner = makeSigner(signer);
+    const topicHex = makeTopic(topic);
+    const topicBytes = hexToBytes<32>(topicHex);
+    const feedR = this.makeFeedR(topic, canonicalSigner.address);
+    const socWriter = this.bee.makeSOCWriter(canonicalSigner);
 
     /**
      * Sets the upload chunk to update
@@ -142,16 +152,16 @@ export class SequentialFeed implements SwarmFeed<number> {
     const setUpdate = async (
       index: number,
       postageBatchId: string | BatchId,
-      reference: Reference,
+      reference: Reference
     ): Promise<Reference> => {
-      const identifier = this.getIdentifier(topicBytes, index)
+      const identifier = this.getIdentifier(topicBytes, index);
 
       return socWriter.upload(
         postageBatchId,
         identifier,
-        assembleSocPayload(hexToBytes(reference) as ChunkReference), //TODO metadata
-      )
-    }
+        assembleSocPayload(hexToBytes(reference) as ChunkReference) //TODO metadata
+      );
+    };
 
     /**
      * Sets the next upload chunk
@@ -161,24 +171,24 @@ export class SequentialFeed implements SwarmFeed<number> {
      */
     const setLastUpdate = async (
       postageBatchId: string | BatchId,
-      reference: Reference,
+      reference: Reference
     ): Promise<Reference> => {
-      let index: number
+      let index: number;
       try {
-        const lastIndex = await feedR.getLastIndex()
-        index = lastIndex + 1
+        const lastIndex = await feedR.getLastIndex();
+        index = lastIndex + 1;
       } catch (e) {
-        index = 0
+        index = 0;
       }
 
-      return setUpdate(index, postageBatchId, reference)
-    }
+      return setUpdate(index, postageBatchId, reference);
+    };
 
     return {
       ...feedR,
       setUpdate,
       setLastUpdate,
-    }
+    };
   }
 
   /**
@@ -188,8 +198,8 @@ export class SequentialFeed implements SwarmFeed<number> {
    * @returns a bytes 32
    */
   public getIdentifier(topic: Utils.Bytes<32>, index: number): Utils.Bytes<32> {
-    const indexBytes = writeUint64BigEndian(index)
+    const indexBytes = writeUint64BigEndian(index);
 
-    return Utils.keccak256Hash(topic, indexBytes)
+    return Utils.keccak256Hash(topic, indexBytes);
   }
 }

@@ -4,11 +4,16 @@ Swarm Feed Sequential
 
 ## Abstract
 
-This Yjs provider uses Swarm Feeds Sequential mechanism, which is more efficient than Swarm Feeds Epoch. This library contains a complete Typescript implementation from scratch.
+Swarm Feed Sequential is a previously unreleased FDP library that implements Swarm Feeds as Sequential type. There are three types of feeds: Epoch, Sequential and Streaming.
 
-We also added research technology from previous samples, in this case a simple wrapper which stores/read from a sequential feed. This can be extended to use Beeson, which in this Yjs provider we removed to avoid dependency complexity. Thus, the Yjs update data are stored as hex in the feed.
+## What can you do with a Sequential Feed
 
-Because a Swarm Feed requires a Topic and Address, we need to provider a signing  private key.
+You can use it as off-chain, verifiable append-only log, either client or server side.
+
+## Utilities
+
+Additionally, this library includes `FeedStorage` and `BeesonMultiformatFeedStorage`, where you can use to store Uint8Array values or JSON values formatted as IPLD Beeson blocks.
+
 
 
 ## Table of Contents
@@ -21,127 +26,168 @@ Because a Swarm Feed requires a Topic and Address, we need to provider a signing
 
 ## Install
 
-`npm install y-fdp-storage`
+`npm install swarm-feed-sequential`
 
-## Usage
-```typescript
-import * as Y from 'yjs'
-import { Bee } from '@ethersphere/bee-js'
-import { hexToBytes, makePrivateKeySigner, FdpStoragePersistence } from 'y-fdp-storage'
-
-const postageBatchId = process.env.BEE_POSTAGE || '1c082c5e642e15d49b6689f5437c2eb9e6aa9c546a8ed1d11d0024b043bca371'
-const bee = new Bee('http://localhost:1633')
-
-const testIdentity = {
-  privateKey: '634fb5a872396d9693e5c9f9d7233cfa93f395c093371017ff44aa9ae6564cdd',
-  publicKey: '03c32bb011339667a487b6c1c35061f15f7edc36aa9a0f8648aba07a4b8bd741b4',
-  address: '8d3766440f0d7b949a5e32995d09619a7f86e632',
-}
-const wallet = makePrivateKeySigner(hexToBytes(testIdentity.privateKey))
-const topic = '/crdt/document/test'
-
-// Create FdpStoragePersistence object
-const persistence = new FdpStoragePersistence(bee, wallet, topic, postageBatchId)
-
-// Create Yjs document
-const doc = new Y.Doc()
-
-// On update event, store updates to bee
-doc.on('update', async update => {
-    await persistence.storeUpdate(update)
-})
-
-// Or use persistence.autoUpdate(doc, interval_milliseconds)
-
-doc.getText('test').insert(0, 'Hello World')
-
-const mostRecentDoc = await persistence.getYDoc()
-// Hello World
-
-const close = persistence.subscribe(doc);
-```
-
-
-## Usage with fdp-storage
-```typescript
-import * as Y from 'yjs'
-import { FdpStorage } from '@fairdatasociety/fdp-storage'
-const { hexToBytes } = Utils
-import { hexToBytes, makePrivateKeySigner, FdpStoragePersistence } from 'y-fdp-storage'
-
-const postageBatchId = process.env.BEE_POSTAGE || '1c082c5e642e15d49b6689f5437c2eb9e6aa9c546a8ed1d11d0024b043bca371'
-const fdp = new FdpStorage('http://localhost:1633', postageBatchId)
-
-const topic = '/crdt/document/test'
-
-// Create FdpStoragePersistence object
-const persistence = new FdpStoragePersistence(fdp.connection.bee, fdp.account.wallet, topic, fdp.connection.postageBatchId)
-
-// Create Yjs document
-const doc = new Y.Doc()
-
-// On update event, store updates to bee
-doc.on('update', async update => {
-    await persistence.storeUpdate(update)
-})
-
-doc.getText('test').insert(0, 'Hello World')
-
-const mostRecentDoc = await persistence.getYDoc()
-// Hello World
-```
 
 ## API
 
 
-## FdpStoragePersistence
+## SequentialFeed
 
-Creates a FdpStoragePersistence instance.
+Creates a SequentialFeed instance.
 
 ```typescript
-const persistence = new FdpStoragePersistence(fdp.connection.bee, fdp.account.wallet, topic, fdp.connection.postageBatchId)
+const f = new SequentialFeed(fdp.connection.bee)
 ```
 
-### storeUpdate
+### makeFeedR
 
-Writes the Yjs update to a feed.
+Creates a sequential feed reader - SwarmFeedR
 
 ```typescript
-const update = Y.encodeStateAsUpdate(doc)
-await persistence.storeUpdate(update)
+const topic = `/crdt/document/test1`
+const address = `0x1111111254fb6c44bac0bed2854e76f90643097d`
+const feedR = f.makeFeedR(topic, address);
 ```
 
-### getYDoc
+### makeFeedRW
 
-Reads the last state as a YDoc.
-
-```typescript
-const doc = await persistence.getYDoc()
-```
-### subscribe
-
-Subscribes to the feed and emits updates. Returns a function to cancel subscription interval.
+Creates a sequential feed reader/writer - SwarmFeedRW
 
 ```typescript
-const close = persistence.subscribe(doc, 30_000)
-```
-
-### autoUpdate
-
-Pushes updates. Returns a function to cancel push interval.
-
-```typescript
-const close = persistence.autoUpdate(doc, 30_000)
+const topic = `/crdt/document/test1`
+const privateKey = `.....`
+const feedR = f.makeFeedRW(topic, privateKey);
 ```
 
 
+## SwarmFeedR interface
+
+### getLastUpdate
+
+Gets the last update in the feed
+
+```typescript
+const feedUpdate = await feedR.getLastUpdate()
+```
+
+### getLastIndex
+
+Gets the last index in the feed
+
+```typescript
+const feedIndex = await feedR.getLastIndex()
+```
+
+### findLastUpdate
+
+Gets the last appended chunk in the feed.
+
+```typescript
+const chunk = await feedR.findLastUpdate()
+```
+
+### getUpdate
+
+Downloads a chunk by index number.
+
+```typescript
+const index = 0
+const chunk = feedR.getUpdate(index)
+```
+
+### getUpdates
+
+Download all chunk by indices.
+
+```typescript
+const indices = [0, 1, 2]
+const chunks = feedR.getUpdates(indices)
+```
+
+## SwarmFeedRW interface
+
+### setUpdate
+
+Sets the upload chunk to update.
+
+```typescript
+import * as Block from "multiformats/block";
+import { codec, hasher } from "@fairdatasociety/beeson-multiformats";
+import { BeeSon, Type } from "@fairdatasociety/beeson";
+import { SequentialFeed } from "./sequential-feed";
+import { Bee } from "@ethersphere/bee-js";
+import { BlockDecoder } from "multiformats/block";
+import { JsonValue } from "@fairdatasociety/beeson/dist/types";
+
+const bee = new Bee()
+const postageBatchId = `...`
+const topic = `/crdt/document/test1`
+const signer = makePrivateKeySigner(`...`)
+const feedRW = f.makeFeedRW(topic, signer);
+
+const beeson = new BeeSon({
+  json: {
+    ...state,
+    timestamp: Date.now(),
+  },
+});
+const value = beeson;
+
+// encode a block
+const block = await Block.encode({ value, codec, hasher });
+
+const reference = await bee.uploadData(
+  postageBatchId,
+  block.bytes
+);
+const index = 1
+return feedRW.setUpdate(index, postageBatchId, reference.reference);
+```
+
+### setLastUpdate
+
+Sets the next upload chunk.
+
+```typescript
+import * as Block from "multiformats/block";
+import { codec, hasher } from "@fairdatasociety/beeson-multiformats";
+import { BeeSon, Type } from "@fairdatasociety/beeson";
+import { SequentialFeed } from "./sequential-feed";
+import { Bee } from "@ethersphere/bee-js";
+import { BlockDecoder } from "multiformats/block";
+import { JsonValue } from "@fairdatasociety/beeson/dist/types";
+
+const bee = new Bee()
+const postageBatchId = `...`
+const topic = `/crdt/document/test1`
+const signer = makePrivateKeySigner(`...`)
+const feedRW = f.makeFeedRW(topic, signer);
+
+const beeson = new BeeSon({
+  json: {
+    ...state,
+    timestamp: Date.now(),
+  },
+});
+const value = beeson;
+
+// encode a block
+const block = await Block.encode({ value, codec, hasher });
+
+const reference = await bee.uploadData(
+  postageBatchId,
+  block.bytes
+);
+const index = 1
+return feedRW.setLastUpdate(postageBatchId, reference.reference); 
+```
 ## Maintainers
 
 [molekilla](https://github.com/molekilla)
 
-## References
 
-[Yjs](https://docs.yjs.dev/)
+
 
 ## License
 
