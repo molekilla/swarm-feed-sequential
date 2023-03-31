@@ -19,9 +19,7 @@ Additionally, this library includes `FeedStorage` and `BeesonMultiformatFeedStor
 ## Table of Contents
 
 - [Install](#install)
-- [Usage](#usage)
 - [API](#api)
-- [References](#references)
 - [License](#license)
 
 ## Install
